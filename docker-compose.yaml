@@ -1,0 +1,142 @@
+services:
+  # =========================================================================
+  # 1. DATABASE: MySQL untuk Casdoor
+  # =========================================================================
+  # Casdoor membutuhkan database. Image resmi Casdoor versi terbaru
+  # tidak menyertakan driver SQLite (CGO dependency). Maka kita pakai
+  # MySQL sebagai database engine.
+  # =========================================================================
+  casdoor-db:
+    image: mysql:8.0
+    container_name: casdoor-db
+    environment:
+      MYSQL_ROOT_PASSWORD: casdoor_root_pass
+      MYSQL_DATABASE: casdoor
+      MYSQL_USER: casdoor
+      MYSQL_PASSWORD: casdoor_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - casdoor-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - sso-network
+
+  # =========================================================================
+  # 2. PUSAT SSO: CASDOOR (Identity Provider - IdP)
+  # =========================================================================
+  # Casdoor adalah pusat autentikasi SSO. Semua aplikasi akan redirect
+  # ke sini untuk login. Casdoor juga menyediakan endpoint OIDC:
+  #   - /login/oauth/authorize  → untuk login user
+  #   - /api/login/oauth/access_token → backchannel token exchange
+  #   - /api/userinfo           → ambil data profil user
+  # =========================================================================
+  casdoor:
+    image: casbin/casdoor:v1.590.0
+    container_name: sso-casdoor
+    entrypoint: ["/bin/sh", "-c", "echo 'Waiting for MySQL...' && until nc -z casdoor-db 3306; do sleep 2; done && echo 'MySQL ready!' && sed -i 's|driverName = .*|driverName = mysql|g' conf/app.conf && sed -i 's|dataSourceName = .*|dataSourceName = root:casdoor_root_pass@tcp(casdoor-db:3306)/|g' conf/app.conf && sed -i 's|dbName = .*|dbName = casdoor|g' conf/app.conf && cat conf/app.conf | grep -E 'driverName|dataSourceName|dbName' && ./server"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      casdoor-db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sso-network
+
+  # =========================================================================
+  # 3. DATA USER: OPENLDAP & phpLDAPadmin (Legacy Identity Source)
+  # =========================================================================
+  # OpenLDAP menyimpan data user (organizational directory).
+  # Casdoor dapat dikonfigurasi untuk menggunakan LDAP sebagai identity
+  # provider (sinkronisasi user dari LDAP ke Casdoor).
+  # phpLDAPadmin adalah GUI untuk mengelola data di LDAP.
+  # =========================================================================
+  ldap-server:
+    image: osixia/openldap:1.5.0
+    container_name: ldap-server
+    environment:
+      LDAP_ORGANISATION: "Demo Corp"
+      LDAP_DOMAIN: "democorp.local"
+      LDAP_ADMIN_PASSWORD: "ldap_admin_password"
+    ports:
+      - "389:389"
+    networks:
+      - sso-network
+
+  ldap-gui:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: ldap-gui
+    ports:
+      - "8085:80"
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: "ldap-server"
+      PHPLDAPADMIN_HTTPS: "false"
+    depends_on:
+      - ldap-server
+    networks:
+      - sso-network
+
+  # =========================================================================
+  # 4. APLIKASI 1: PHP 8.2 NATIVE (OIDC Code di Aplikasi)
+  # =========================================================================
+  # Aplikasi ini mengimplementasikan OIDC Authorization Code Grant Flow
+  # secara NATIVE di kode PHP (tanpa reverse proxy oauth2-proxy).
+  #
+  # ALUR:
+  #   1. User buka http://localhost:3001/ → index.php cek session
+  #   2. Jika session kosong → redirect ke Casdoor Authorize Endpoint
+  #   3. Casdoor redirect balik ke /callback.php dengan parameter 'code'
+  #   4. callback.php melakukan backchannel POST ke Casdoor
+  #      (http://casdoor:8000/api/login/oauth/access_token) untuk
+  #      menukar code → access_token
+  #   5. callback.php ambil userinfo dari /api/userinfo
+  #   6. Simpan data user di PHP Session → redirect ke index.php
+  # =========================================================================
+  app1:
+    build:
+      context: ./app1
+      dockerfile: Dockerfile
+    container_name: app1-php
+    ports:
+      - "3001:80"
+    depends_on:
+      - casdoor
+    networks:
+      - sso-network
+
+  # =========================================================================
+  # 5. APLIKASI 2: PYTHON FLASK (OIDC Code di Aplikasi)
+  # =========================================================================
+  # Sama seperti App1, aplikasi Flask ini mengimplementasikan OIDC
+  # Authorization Code Grant Flow secara NATIVE di kode Python.
+  #
+  # ALUR identik dengan App1, hanya implementasi di Flask:
+  #   - Route '/' → cek Flask session
+  #   - Route '/callback' → backchannel token exchange + ambil userinfo
+  #   - Route '/logout' → hapus session lokal + redirect Casdoor logout
+  # =========================================================================
+  app2:
+    build:
+      context: ./app2
+      dockerfile: Dockerfile
+    container_name: app2-flask
+    ports:
+      - "3002:5000"
+    depends_on:
+      - casdoor
+    networks:
+      - sso-network
+
+networks:
+  sso-network:
+    driver: bridge
+
+volumes:
+  casdoor-db-data:
+    driver: local
