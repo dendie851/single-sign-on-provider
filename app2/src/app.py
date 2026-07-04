@@ -1,22 +1,3 @@
-"""
-=================================================================
-APLIKASI 2 - FLASK WEB APP dengan OIDC Authorization Code Flow
-=================================================================
-App ini mengimplementasikan OIDC Authorization Code Grant Flow
-secara NATIVE di kode Flask, tanpa reverse proxy oauth2-proxy.
-
-ALUR:
-  1. Route '/' mengecek session Flask untuk data user.
-  2. Jika session kosong, redirect ke Casdoor Authorize Endpoint.
-  3. Casdoor redirect balik ke '/callback' dengan parameter 'code'.
-  4. Di '/callback', Flask melakukan backchannel POST ke Casdoor
-     untuk menukar code → access_token, lalu ambil data userinfo.
-  5. Simpan data user di Flask session → redirect ke '/'.
-  6. Route '/logout' membersihkan session lokal dan redirect ke
-     Casdoor logout endpoint.
-=================================================================
-"""
-
 import os
 import secrets
 import requests
@@ -24,14 +5,13 @@ from flask import Flask, session, redirect, request, render_template_string
 from functools import wraps
 
 # ===================================================================
-# KONFIGURASI
-# ===================================================================
-# Dalam produksi, gunakan environment variable, BUKAN hardcoded!
+# KONFIGURASI (Disesuaikan dengan gambar image_ba5d09.png)
 # ===================================================================
 OIDC_CONFIG = {
-    # Kredensial aplikasi di Casdoor
-    "client_id": os.environ.get("SSO_CLIENT_ID", "app2-client"),
-    "client_secret": os.environ.get("SSO_CLIENT_SECRET", "app2-secret-key"),
+    # Kredensial aplikasi yang diambil dari area stabilo kuning Casdoor
+    
+    "client_id": os.environ.get("SSO_CLIENT_ID", "9a40d84124e6e334da3f"),
+    "client_secret": os.environ.get("SSO_CLIENT_SECRET", "1b3d16045387d1113081d673ee4234bc83855c23"),
 
     # URL INTERNAL Docker untuk backchannel (server-to-server)
     "internal_base": os.environ.get("SSO_INTERNAL_BASE", "http://casdoor:8000"),
@@ -39,10 +19,10 @@ OIDC_CONFIG = {
     # URL PUBLIC (dari browser) untuk redirect user ke Casdoor login
     "public_base": os.environ.get("SSO_PUBLIC_BASE", "http://localhost:8000"),
 
-    # Redirect URI aplikasi kita — harus terdaftar di Casdoor
+    # Redirect URI aplikasi — disamakan dengan konfigurasi di Casdoor
     "redirect_uri": os.environ.get("REDIRECT_URI", "http://localhost:3002/callback"),
 
-    # Secret key untuk Flask session signing (jaga kerahasiaan!)
+    # Secret key untuk Flask session signing
     "flask_secret": os.environ.get("FLASK_SECRET_KEY", "ganti-dengan-random-string-panjang"),
 }
 
@@ -179,12 +159,6 @@ def callback():
     """
     ==================================================================
     LANGKAH 2-4: Callback dari Casdoor setelah user login.
-
-    Di sinilah terjadi:
-      2. Validasi state (CSRF protection)
-      3. Backchannel: Tukar authorization code → access_token
-      4. Ambil userinfo dari Casdoor
-      5. Simpan di Flask session
     ==================================================================
     """
 
@@ -203,11 +177,6 @@ def callback():
     # ================================================================
     # LANGKAH 3: Backchannel — Tukar Code → Access Token
     # ================================================================
-    # Aplikasi (Flask) mengirim POST request langsung ke Casdoor
-    # melalui jaringan internal Docker (server-to-server).
-    # Credentials (client_id + client_secret) dikirim di body request.
-    # ================================================================
-
     token_payload = {
         'grant_type': 'authorization_code',
         'client_id': OIDC_CONFIG['client_id'],
@@ -235,9 +204,6 @@ def callback():
     # ================================================================
     # LANGKAH 4: Ambil Userinfo dari Endpoint Casdoor
     # ================================================================
-    # Dengan access_token yang valid, kita request data profil user.
-    # ================================================================
-
     try:
         userinfo_resp = requests.get(
             OIDC_USERINFO_ENDPOINT,
@@ -251,8 +217,6 @@ def callback():
     user_data = userinfo_resp.json()
 
     # --- LANGKAH 5: Simpan data user di Flask Session ---
-    # Session ini bersifat stateful di sisi aplikasi.
-    # Setelah ini, route '/' akan mendeteksi bahwa user sudah login.
     session['user_data'] = user_data
     session.permanent = True  # Perpanjang session lifetime
 
@@ -270,7 +234,7 @@ def logout():
     """
     session.clear()
 
-    # Redirect ke Casdoor logout dengan redirect_uri kembali ke sini
+    # Redirect ke Casdoor logout dengan redirect_uri kembali ke root aplikasi (port 3002)
     logout_url = f"{OIDC_LOGOUT_ENDPOINT}?redirect_uri=http://localhost:3002/"
     return redirect(logout_url)
 
@@ -279,4 +243,5 @@ def logout():
 # ENTRY POINT
 # ===================================================================
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Port diubah ke 3002 agar sesuai dengan Redirect URI terdaftar
+    app.run(host='0.0.0.0', port=3002, debug=False)
