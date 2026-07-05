@@ -30,7 +30,7 @@ Here is exactly how we did it.
     - [Step 5: Testing Single Sign-On \& Session Verification (App 1 - PHP)](#step-5-testing-single-sign-on--session-verification-app-1---php)
     - [Step 6: Testing Single Sign-On (App 2 - Python Flask)](#step-6-testing-single-sign-on-app-2---python-flask)
 
----
+
 
 ## 1. System Architecture
 
@@ -82,8 +82,6 @@ The unified login process consists of six main steps, which coordinate user-agen
   ```
   which clears the SSO session cookie globally, securing all integrated client applications at once.
 
----
-
 ## 2. Integration Flow
 
 The integration between Casdoor and the legacy LDAP system follows a structured setup and runtime synchronization flow.
@@ -103,7 +101,7 @@ Here is the flow diagram illustrating how integration and login authentication a
   6. The application exchanges this code for a JWT token via a backchannel call, reads user profile claims, and logs the user in.
 - **Single Sign-Out Flow**: When a user logs out of one app, they are redirected to Casdoor's logout endpoint, which invalidates the SSO session across all connected applications.
 
----
+
 
 ## 3. Step-by-Step Implementation Evidence
 
@@ -115,7 +113,7 @@ We containerized all services using Docker Compose to ensure a reproducible envi
 ![Docker Deployment](ss/1-step-1-docker-deployment.png)
 *Figure 1: Deploying all services via docker-compose up, spin up the entire infrastructure.*
 
----
+
 
 ### Step 2: Legacy LDAP Server Configuration
 First, we verified our legacy LDAP server state and structured the organizational units (OUs), groups, and user accounts using phpLDAPadmin.
@@ -153,7 +151,7 @@ First, we verified our legacy LDAP server state and structured the organizationa
 ![LDAP Best Practice Structure](ss/11-step-2-ldap-best-practice-structtur.png)
 *Figure 12: Final view of the well-structured LDAP directory schema following system best practices.*
 
----
+
 
 ### Step 3: Setting Up Casdoor and Integrating LDAP
 Next, we configured Casdoor to connect to our legacy LDAP server as a primary provider, syncing user accounts automatically.
@@ -185,7 +183,7 @@ Next, we configured Casdoor to connect to our legacy LDAP server as a primary pr
 ![User Grouping 2](ss/20-step-3-casdoor-add-organitaion-integration-to-pengelompokan-user-berdasarkan-organisation-2.png)
 *Figure 21: Finalizing and verifying mapped organization-level user groupings.*
 
----
+
 
 ### Step 4: Registering Applications in Casdoor
 We registered our two internal applications (App 1 and App 2) as OAuth/OIDC clients in Casdoor.
@@ -208,7 +206,7 @@ We registered our two internal applications (App 1 and App 2) as OAuth/OIDC clie
 ![URL Login Redirect Configuration](ss/25-step-4-casdoor-integration-application-url-login-redirect-ke-casedoor.png)
 *Figure 27: Determining the correct OIDC authorization URL to initiate the SSO login redirect flow.*
 
----
+
 
 ### Step 5: Testing Single Sign-On & Session Verification (App 1 - PHP)
 We tested the end-to-end authentication flow on App 1 (PHP) to verify that login redirect, LDAP authentication, token exchange, and local sessions worked seamlessly.
@@ -234,7 +232,7 @@ We tested the end-to-end authentication flow on App 1 (PHP) to verify that login
 ![JWT Details Analysis](ss/32-step-5-casdoor-app1-check-token-user-login-detail.png)
 *Figure 34: Decrypting/reading the JWT token payload (showing sub, org, and email fields).*
 
----
+
 
 ### Step 6: Testing Single Sign-On (App 2 - Python Flask)
 Finally, we opened App 2 in the same browser session to ensure the user was logged in automatically without needing to re-type their credentials (SSO).
